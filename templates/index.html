@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexus</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/app.css?v=8" />
+</head>
+<body>
+  <div id="login-screen" class="login-screen hidden">
+    <div class="login-shell">
+      <section class="login-hero">
+        <div class="brand-row">
+          <div class="logo-mark">N</div>
+          <span class="brand-name">Nexus</span>
+        </div>
+        <h1>Fale e jogue<br>com seus amigos.</h1>
+        <p class="hero-lead">Salas de texto, ligação de voz e convites por link. Simples, direto, no navegador.</p>
+        <ul class="hero-points">
+          <li><strong>Voz</strong>Entre na call e fale enquanto joga.</li>
+          <li><strong>Chat</strong>Canais, mensagens diretas e quem está online.</li>
+          <li><strong>Convite</strong>Um link e seus amigos entram na sala.</li>
+        </ul>
+      </section>
+      <section class="login-card">
+        <h2>Entrar</h2>
+        <p class="card-sub">Use a mesma conta em qualquer computador.</p>
+        <div id="invite-banner" class="invite-banner hidden"></div>
+        <div class="tabs">
+          <button class="tab active" data-tab="login" type="button">Entrar</button>
+          <button class="tab" data-tab="register" type="button">Criar conta</button>
+        </div>
+        <form id="login-form" class="auth-form">
+          <label>Usuário<input name="username" autocomplete="username" required /></label>
+          <label>Senha<input name="password" type="password" autocomplete="current-password" required /></label>
+          <button type="submit" class="btn primary full">Entrar</button>
+        </form>
+        <form id="register-form" class="auth-form hidden">
+          <label>Usuário<input name="username" autocomplete="username" required minlength="3" maxlength="24" /></label>
+          <label>Nome de exibição<input name="display_name" maxlength="64" placeholder="Como seus amigos te veem" /></label>
+          <label>Senha<input name="password" type="password" autocomplete="new-password" required minlength="4" /></label>
+          <button type="submit" class="btn primary full">Criar conta</button>
+        </form>
+        <p id="auth-error" class="form-error"></p>
+      </section>
+    </div>
+  </div>
+
+  <div id="app" class="app hidden">
+    <nav class="server-rail" aria-label="Servidores">
+      <button class="server-btn home-btn" id="home-btn" title="Início" type="button">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      </button>
+      <div class="rail-sep"></div>
+      <div id="server-list" class="server-list"></div>
+      <button class="server-btn add-btn" id="add-server-btn" title="Novo servidor" type="button">+</button>
+    </nav>
+
+    <aside class="sidebar">
+      <header class="sidebar-head" id="sidebar-head">Amigos</header>
+      <div class="sidebar-scroll" id="sidebar-scroll"></div>
+      <div id="voice-bar" class="voice-bar hidden"></div>
+      <footer class="user-panel" id="user-panel"></footer>
+    </aside>
+
+    <main class="main">
+      <header class="topbar" id="topbar"></header>
+      <section id="friends-view" class="friends-view"></section>
+      <section id="chat-view" class="chat-view hidden">
+        <div id="messages" class="messages"></div>
+        <div id="typing" class="typing"></div>
+        <form id="composer" class="composer">
+          <input id="composer-input" autocomplete="off" maxlength="2000" placeholder="Enviar mensagem..." />
+        </form>
+      </section>
+      <section id="voice-view" class="voice-view hidden"></section>
+    </main>
+
+    <aside class="members" id="members-panel"></aside>
+  </div>
+
+  <div id="settings" class="settings hidden">
+    <aside class="settings-nav">
+      <p class="eyebrow">Nexus</p>
+      <h3>Configurações</h3>
+      <div id="settings-nav-list"></div>
+    </aside>
+    <section class="settings-main">
+      <header class="settings-head">
+        <h2 id="settings-title">Configurações</h2>
+        <button class="icon-btn" id="settings-close" type="button" title="Fechar (Esc)">✕</button>
+      </header>
+      <div id="settings-body" class="settings-body"></div>
+    </section>
+  </div>
+  <div id="modal" class="modal hidden" role="dialog">
+    <div class="modal-card" id="modal-card"></div>
+  </div>
+  <div id="toasts" class="toasts"></div>
+
+  <script src="/static/js/sounds.js?v=7"></script>
+  <script src="/static/js/voice.js"></script>
+  <script src="/static/js/app.js?v=8"></script>
+  <script src="/static/js/settings.js?v=7"></script>
+</body>
+</html>

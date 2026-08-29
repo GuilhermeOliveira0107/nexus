@@ -1,0 +1,330 @@
+PASSO A PASSO — deixar o Nexus online (igual o Discord)
+=======================================================
+
+O que isso faz
+--------------
+Hoje o Nexus so funciona se o SEU PC estiver ligado. Isso e teste local.
+
+Para os 5 amigos usarem de CASA, cada um no PC dele, o Nexus precisa
+morar na internet (nuvem). Aí:
+
+  - Seu PC pode desligar. A sala continua no ar.
+  - Todo mundo abre o MESMO link e aparece online.
+  - O app de PC (start-desktop.bat) so e a janela. Quem segura o online
+    e o servidor na nuvem.
+
+Voce vai usar 3 sites GRATIS:
+  1) GitHub  — guarda o codigo
+  2) Neon    — banco (contas, mensagens, servidores)
+  3) Render  — liga o site 24h
+
+Tempo estimado: 20 a 30 minutos na primeira vez.
+Nao precisa saber programar. So clicar e copiar.
+
+
+=======================================================
+PARTE 0 — o que voce precisa antes
+=======================================================
+
+- Um e-mail (Gmail serve)
+- Celular por perto (GitHub e Neon pedem codigo)
+- Cartao: o Render GRATIS em geral NAO cobra. Se pedirem cartao,
+  e so cadastro; o plano Free nao deve cobrar se voce nao mudar o plano.
+- Esta pasta do projeto:  C:\Users\Admin\Desktop\Discord 2.0
+- NAO apague a pasta. E o projeto.
+
+
+=======================================================
+PARTE 1 — criar conta no GitHub e enviar o projeto
+=======================================================
+
+O GitHub e um "Drive do codigo". O Render so publica o que estiver la.
+
+1.1  Abra o navegador e entre em:
+     https://github.com/signup
+
+1.2  Crie a conta (e-mail, senha, usuario). Confirme o e-mail.
+
+1.3  Depois de logado, clique no botao "+" no canto superior direito
+     e escolha "New repository".
+
+1.4  Preencha:
+     - Repository name:  nexus
+     - Deixe PUBLIC (publico) — e mais facil no plano gratis
+     - NAO marque "Add a README"
+     - Clique em "Create repository"
+
+1.5  Agora o site mostra comandos. IGNORE eles por enquanto.
+
+1.6  No SEU PC, abra o PowerShell (menu Iniciar, digite PowerShell).
+
+1.7  Cole estes comandos, um de cada vez, e aperte Enter.
+     Se o Git nao estiver instalado, baixe em https://git-scm.com
+     (Next, Next, Install). Feche e abra o PowerShell de novo.
+
+     cd "C:\Users\Admin\Desktop\Discord 2.0"
+
+     git init
+
+     git add .
+
+     git commit -m "Nexus"
+
+     git branch -M main
+
+     git remote add origin https://github.com/SEU_USUARIO/nexus.git
+
+     Troque SEU_USUARIO pelo seu usuario do GitHub.
+     Exemplo: git remote add origin https://github.com/oliveira/nexus.git
+
+     git push -u origin main
+
+1.8  Vai pedir login do GitHub. Entre com a conta.
+     Se pedir um token em vez de senha:
+       GitHub -> foto -> Settings -> Developer settings ->
+       Personal access tokens -> Tokens (classic) -> Generate new token
+       Marque "repo" -> Generate -> copie o token e cole no lugar da senha.
+
+1.9  Atualize a pagina do repositorio no GitHub.
+     Voce deve ver as pastas app, static, templates, Dockerfile, etc.
+     Se aparecer, a Parte 1 acabou.
+
+
+=======================================================
+PARTE 2 — criar o banco no Neon (gratis)
+=======================================================
+
+O banco guarda usuarios, senhas (criptografadas), salas e mensagens.
+Sem ele, o site na nuvem "esquece" tudo quando reinicia.
+
+2.1  Abra:
+     https://neon.tech
+
+2.2  Clique em "Sign up" (pode entrar com Google ou GitHub).
+
+2.3  Depois do login, clique em "Create a project" / "New Project".
+
+2.4  Preencha:
+     - Project name:  nexus
+     - Region: escolha a mais perto (ex: Sao Paulo, se existir;
+       senao US East ou Europe)
+     - Clique em Create
+
+2.5  Na tela do projeto, procure "Connection string" ou "Connect".
+     Vai aparecer um texto parecido com:
+
+     postgresql://usuario:senha@ep-xxxx.us-east-1.aws.neon.tech/neondb?sslmode=require
+
+2.6  Copie a string INTEIRA. Nao compartilhe no Zap.
+     Cole num Bloco de Notas temporario. Voce vai usar na Parte 3.
+
+     Se tiver duas opcoes (pooled / direct), use a que tiver
+     "sslmode=require" no final.
+
+
+=======================================================
+PARTE 3 — publicar o site no Render (gratis)
+=======================================================
+
+O Render e o computador na nuvem que fica ligado.
+
+3.1  Abra:
+     https://dashboard.render.com
+
+3.2  Clique em "Get Started" / "Sign in".
+     Escolha "Sign in with GitHub" e autorize o Render a ver seus repos.
+
+3.3  No painel, clique em "New +" (canto superior).
+     Escolha "Web Service".
+
+3.4  Na lista, ache o repositorio "nexus" e clique em "Connect".
+     Se nao aparecer: "Configure account" e libere o repo nexus.
+
+3.5  Preencha a tela com CALMA (nao clique Create ainda):
+
+     Name:              nexus
+     Region:            Oregon (ou a que vier)
+     Language/Runtime:  Docker
+                        (se perguntar, e Docker, NAO Python)
+     Branch:            main
+     Instance type:     Free
+
+     Se aparecer "Root Directory", deixe VAZIO.
+     Se aparecer "Dockerfile Path", deixe:  Dockerfile
+
+3.6  Role ate "Environment Variables" e clique em "Add Environment Variable".
+
+     Key:    DATABASE_URL
+     Value:  cole a connection string do Neon (Parte 2.6)
+
+     Sem essa variavel o site sobe mas as contas somem.
+
+3.7  Clique em "Create Web Service" (ou "Deploy").
+
+3.8  Vai abrir um log preto (Deploy). Espere 3 a 8 minutos.
+     Quando der certo, aparece no topo algo como:
+
+     Your service is live
+     https://nexus-xxxx.onrender.com
+
+     Copie esse link. E o endereco da sua "Discord".
+
+3.9  Se o deploy FALHAR (vermelho):
+     - Confira se o Dockerfile esta no GitHub
+     - Confira se DATABASE_URL foi colada inteira
+     - Clique em "Manual Deploy" -> "Clear build cache & deploy"
+     - Se ainda falhar, copie a ultima linha vermelha do log
+       e me mande no chat
+
+
+=======================================================
+PARTE 4 — testar o link (voce)
+=======================================================
+
+4.1  Abra o link do Render no Chrome.
+     Primeira vez do dia no plano Free: pode demorar 30 a 60 segundos
+     (o site "acordando"). Espere. Nao feche.
+
+4.2  Crie SUA conta (Criar conta).
+     Essa conta e NOVA. As contas do localhost NAO passam pra nuvem.
+
+4.3  Clique em Convidar, copie o link da sala.
+
+4.4  Abra uma janela anonima (Ctrl+Shift+N), cole o link do SITE
+     (https://nexus-xxxx.onrender.com), crie uma segunda conta
+     e entre no convite. Se o chat e a call funcionarem, esta ok.
+
+
+=======================================================
+PARTE 5 — chamar os amigos
+=======================================================
+
+5.1  Mande no Zap DUAS coisas:
+
+     a) O site:
+        https://nexus-xxxx.onrender.com
+
+     b) O convite da sala (botao Convidar, dentro do app).
+        Fica parecido com:
+        https://nexus-xxxx.onrender.com/?invite=ABCD1234
+
+5.2  Cada amigo:
+     - Abre o link no Chrome (computador)
+     - Cria a PROPRIA conta (usuario + senha)
+     - Se usou o link com ?invite=  ja cai na sua sala
+     - Se nao, clica no + dos servidores e cola o codigo do convite
+
+5.3  Entrem no canal de voz Lobby.
+     Liberem o microfone quando o Chrome pedir.
+
+5.4  IMPORTANTE:
+     - Nao mande start.bat nem a pasta do projeto pros amigos
+     - Eles NAO precisam do seu PC ligado
+     - Eles NAO precisam do Python
+
+
+=======================================================
+PARTE 6 — app de PC (janela, sem navegador)
+=======================================================
+
+So faca isso DEPOIS do site no Render estar no ar.
+
+6.1  Nesta pasta do projeto, crie um arquivo chamado:
+
+     nuvem.url
+
+     (Bloco de Notas -> Salvar como -> "nuvem.url"
+      Tipo: Todos os arquivos, NAO .txt)
+
+6.2  Dentro do arquivo, UMA linha so, o link do Render, exemplo:
+
+     https://nexus-xxxx.onrender.com
+
+     Sem espaco, sem barra extra no final. Salve.
+
+6.3  De dois cliques em:
+
+     start-desktop.bat
+
+     Abre o Nexus em janela. E o mesmo site, so que como app.
+
+6.4  Atalho na area de trabalho:
+     - Clique com o direito em start-desktop.bat
+     - Enviar para -> Area de trabalho (criar atalho)
+     - Pode renomear o atalho para "Nexus"
+
+6.5  Os AMIGOS tambem podem ter o app de PC:
+     - Voce manda a pasta do projeto OU so o start-desktop.bat
+       + desktop.py + a pasta app/static (mais facil: manda o site)
+     - Mais simples: eles usam o Chrome no link do Render.
+       O app de PC e opcional.
+
+     Se forem usar o .bat, o arquivo nuvem.url deles tem que ter
+     o MESMO link do Render. Senao cada um cai num servidor diferente.
+
+
+=======================================================
+PARTE 7 — o que e teste local vs online
+=======================================================
+
+start.bat / start-desktop.bat SEM nuvem.url
+  = so neste PC. Amigos de casa NAO entram.
+
+https://nexus-xxxx.onrender.com  ou  start-desktop.bat COM nuvem.url
+  = online de verdade. Seu PC pode desligar.
+
+
+=======================================================
+PARTE 8 — problemas comuns
+=======================================================
+
+"O site nao abre / gira muito tempo"
+  Plano Free dorme. Espere ate 1 minuto e atualize.
+
+"Login nao funciona / conta sumiu"
+  DATABASE_URL errada ou ausente. No Render:
+  Environment -> confira DATABASE_URL -> Save -> Redeploy.
+
+"Microfone nao pede / nao funciona"
+  Tem que ser HTTPS (o link do Render ja e).
+  Clique no cadeado do Chrome -> Microfone -> Permitir.
+
+"Amigo nao acha a sala"
+  Ele criou conta mas nao usou o convite.
+  Voce: Convidar -> copia o link com ?invite= -> manda de novo.
+
+"Git: 'git' nao e reconhecido"
+  Instale https://git-scm.com e abra um PowerShell NOVO.
+
+"Render nao acha o repositorio"
+  New Web Service -> Configure account -> autorize o repo nexus.
+
+"Call sem audio entre casas diferentes"
+  Alguns roteadores bloqueiam. Teste os dois no Chrome,
+  microfone liberado, HTTPS. Se um ouvir e o outro nao,
+  me avise que a gente ajusta.
+
+
+=======================================================
+PARTE 9 — atualizar o Nexus depois
+=======================================================
+
+Quando eu (ou voce) mudar o codigo:
+
+  cd "C:\Users\Admin\Desktop\Discord 2.0"
+  git add .
+  git commit -m "atualizacao"
+  git push
+
+O Render detecta o push e publica sozinho (2 a 5 minutos).
+
+
+=======================================================
+Resumo em 5 linhas
+=======================================================
+
+1. GitHub: sobe a pasta
+2. Neon: copia a connection string
+3. Render: Web Service Docker + DATABASE_URL
+4. Abre o link https://nexus-xxxx.onrender.com e cria conta
+5. Manda o link (e o convite) no Zap. Opcional: nuvem.url + start-desktop.bat
