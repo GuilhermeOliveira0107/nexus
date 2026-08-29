@@ -183,6 +183,7 @@ $("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("auth-error").textContent = "";
   const body = Object.fromEntries(new FormData(e.target));
+  body.username = normalizeUsername(body.username);
   try {
     const data = await api("/api/auth/login", { method: "POST", body });
     await afterAuth(data.token, data.user);
@@ -191,10 +192,20 @@ $("login-form").addEventListener("submit", async (e) => {
   }
 });
 
+function normalizeUsername(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[\s-]+/g, "_")
+    .replace(/[^a-zA-Z0-9_]/g, "")
+    .slice(0, 24);
+}
+
 $("register-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   $("auth-error").textContent = "";
   const body = Object.fromEntries(new FormData(e.target));
+  body.username = normalizeUsername(body.username);
+  if (e.target.username) e.target.username.value = body.username;
   try {
     const data = await api("/api/auth/register", { method: "POST", body });
     await afterAuth(data.token, data.user);

@@ -72,12 +72,12 @@
           <button class="tab" data-tab="register" type="button">Criar conta</button>
         </div>
         <form id="login-form" class="auth-form">
-          <label>Usuário<input name="username" autocomplete="username" required /></label>
+          <label>Usuário<input name="username" autocomplete="username" required placeholder="joao_guilherme" /></label>
           <label>Senha<input name="password" type="password" autocomplete="current-password" required /></label>
           <button type="submit" class="btn primary full">Entrar</button>
         </form>
         <form id="register-form" class="auth-form hidden">
-          <label>Usuário<input name="username" autocomplete="username" required minlength="3" maxlength="24" /></label>
+          <label>Usuário (sem espaço)<input name="username" autocomplete="username" required minlength="3" maxlength="24" placeholder="joao_guilherme" /></label>
           <label>Nome de exibição<input name="display_name" maxlength="64" placeholder="Como seus amigos te veem" /></label>
           <label>Senha<input name="password" type="password" autocomplete="new-password" required minlength="4" /></label>
           <button type="submit" class="btn primary full">Criar conta</button>
@@ -141,7 +141,7 @@
 
   <script src="/static/js/sounds.js?v=10"></script>
   <script src="/static/js/voice.js"></script>
-  <script src="/static/js/app.js?v=10"></script>
+  <script src="/static/js/app.js?v=11"></script>
   <script src="/static/js/settings.js?v=10"></script>
 </body>
 </html>

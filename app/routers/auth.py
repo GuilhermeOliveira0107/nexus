@@ -22,11 +22,17 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,24}$")
 
 
+def normalize_username(raw: str) -> str:
+    cleaned = re.sub(r"[\s\-]+", "_", (raw or "").strip())
+    cleaned = re.sub(r"[^a-zA-Z0-9_]", "", cleaned)
+    return cleaned[:24]
+
+
 @router.post("/register")
 def register(payload: RegisterIn, db: Session = Depends(get_db)):
-    username = payload.username.strip()
+    username = normalize_username(payload.username)
     if not USERNAME_RE.match(username):
-        raise HTTPException(400, "Use só letras, números e _ no usuário (3 a 24).")
+        raise HTTPException(400, "No usuário não pode ter espaço. Use letras, números ou _ (ex: joao_guilherme).")
     if db.query(User).filter(User.username.ilike(username)).first():
         raise HTTPException(409, "Esse usuário já existe.")
 
@@ -47,7 +53,7 @@ def register(payload: RegisterIn, db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(payload: LoginIn, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username.ilike(payload.username.strip())).first()
+    user = db.query(User).filter(User.username.ilike(normalize_username(payload.username) or payload.username.strip())).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(401, "Usuário ou senha inválidos.")
     token = create_session(db, user)
