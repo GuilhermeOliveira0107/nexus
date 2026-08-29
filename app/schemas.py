@@ -36,7 +36,7 @@ class ChannelIn(BaseModel):
 
 
 class FriendIn(BaseModel):
-    username: str = Field(min_length=3, max_length=24)
+    username: str = Field(min_length=2, max_length=64)
 
 
 class DmIn(BaseModel):

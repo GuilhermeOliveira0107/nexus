@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
@@ -33,11 +35,29 @@ def list_friends(user: User = Depends(get_current_user), db: Session = Depends(g
     return {"accepted": accepted, "incoming": incoming, "outgoing": outgoing}
 
 
+def find_user_by_nick(db: Session, raw: str) -> User | None:
+    needle = (raw or "").strip()
+    if not needle:
+        return None
+    cleaned = re.sub(r"[\s\-]+", "_", needle)
+    cleaned = re.sub(r"[^a-zA-Z0-9_]", "", cleaned)[:24]
+    other = db.query(User).filter(User.username.ilike(cleaned or needle)).first()
+    if other:
+        return other
+    matches = db.query(User).filter(User.display_name.ilike(needle)).all()
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
 @router.post("/friends")
 def add_friend(payload: FriendIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    other = db.query(User).filter(User.username.ilike(payload.username.strip())).first()
+    other = find_user_by_nick(db, payload.username)
     if not other:
-        raise HTTPException(404, "Usuário não encontrado.")
+        raise HTTPException(
+            404,
+            "Essa pessoa ainda não tem conta no Nexus. Ela precisa abrir o site, criar conta, e aí você adiciona o @usuário dela.",
+        )
     if other.id == user.id:
         raise HTTPException(400, "Você não pode se adicionar.")
     existing = friendship_pair(db, user.id, other.id)

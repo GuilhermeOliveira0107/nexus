@@ -502,7 +502,7 @@ function renderFriends() {
       <div>
         <p class="eyebrow">Início</p>
         <h2>Olá, ${state.me.display_name}.</h2>
-        <p class="lead">Adicione alguém pelo usuário ou copie o link da sua sala.</p>
+        <p class="lead">Só funciona se o amigo já criou conta no Nexus. Use o @usuário dele, não o apelido do Discord.</p>
       </div>
       <button class="btn primary" id="invite-big">Convidar amigos</button>
     </div>
@@ -512,7 +512,7 @@ function renderFriends() {
       <div class="stat"><b>${onlineCount}</b><span>online agora</span></div>
     </div>
     <div class="row">
-      <input id="friend-name" placeholder="Usuário do amigo (ex: lucas)" />
+      <input id="friend-name" placeholder="@usuario do Nexus (não o nick do Discord)" />
       <button class="btn" id="add-friend">Adicionar amigo</button>
     </div>
     <h3 style="margin:8px 0;color:var(--muted);font-size:12px;letter-spacing:.06em">PEDIDOS</h3>
