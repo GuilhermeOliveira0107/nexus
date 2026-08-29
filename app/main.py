@@ -34,3 +34,8 @@ def index(request: Request):
 @app.get("/favicon.svg")
 def favicon():
     return FileResponse(BASE_DIR / "static" / "favicon.svg")
+
+
+@app.get("/manifest.json")
+def manifest():
+    return FileResponse(BASE_DIR / "static" / "manifest.json")

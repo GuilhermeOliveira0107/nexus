@@ -490,10 +490,10 @@ function renderFriends() {
     <div class="home-hero">
       <div>
         <p class="eyebrow">Início</p>
-        <h2>Amigos</h2>
+        <h2>Olá, ${state.me.display_name}.</h2>
         <p class="lead">Adicione alguém pelo usuário ou copie o link da sua sala.</p>
       </div>
-      <button class="btn primary" id="invite-big">Convidar</button>
+      <button class="btn primary" id="invite-big">Convidar amigos</button>
     </div>
     <div class="stat-row">
       <div class="stat"><b>${state.servers.length}</b><span>servidores</span></div>
@@ -726,7 +726,7 @@ function renderMessages(stick) {
   if (!state.channel) return;
   const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
   const title = state.channel.type === "dm" ? state.channel.peer.display_name : state.channel.name;
-  let html = `<div class="welcome"><div class="avatar" style="width:68px;height:68px;font-size:26px;background:${state.channel.type === "dm" ? state.channel.peer.avatar_color : "#4f6ef7"}">${initials(title)}</div>
+  let html = `<div class="welcome"><div class="avatar" style="width:68px;height:68px;font-size:26px;background:${state.channel.type === "dm" ? state.channel.peer.avatar_color : "#5b7cfa"}">${initials(title)}</div>
     <h2>${state.channel.type === "dm" ? title : "Bem-vindo a #" + title}</h2>
     <p>${state.channel.type === "dm" ? "Começo da conversa." : "Este é o início do canal."}</p></div>`;
   let lastDay = "";

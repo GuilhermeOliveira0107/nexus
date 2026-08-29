@@ -4,31 +4,68 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Nexus</title>
+  <meta name="theme-color" content="#07080d" />
+  <meta name="description" content="Fale e jogue com seus amigos no Nexus." />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="/manifest.json" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/app.css?v=8" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/app.css?v=10" />
 </head>
 <body>
   <div id="login-screen" class="login-screen hidden">
+    <div class="login-atmosphere" aria-hidden="true">
+      <div class="login-aurora"></div>
+      <div class="login-orb login-orb-a"></div>
+      <div class="login-orb login-orb-b"></div>
+      <div class="login-grid"></div>
+    </div>
     <div class="login-shell">
       <section class="login-hero">
         <div class="brand-row">
-          <div class="logo-mark">N</div>
+          <div class="logo-mark" aria-hidden="true">
+            <svg viewBox="0 0 64 64" width="28" height="28"><path d="M20 16h10.4c8.6 0 14 4.7 14 12.1 0 4.7-2.3 8.2-6.4 10.1L46 48h-9.2L29.2 38.6H28V48h-8V16zm8 16.4h1.8c3.8 0 6.1-1.9 6.1-5.2 0-3.2-2.3-5.1-6.1-5.1H28v10.3z" fill="#fff"/></svg>
+          </div>
           <span class="brand-name">Nexus</span>
         </div>
-        <h1>Fale e jogue<br>com seus amigos.</h1>
-        <p class="hero-lead">Salas de texto, ligação de voz e convites por link. Simples, direto, no navegador.</p>
+        <p class="eyebrow">O espaço do seu grupo</p>
+        <h1>Onde vocês<br><em>se encontram.</em></h1>
+        <p class="hero-lead">Salas, mensagens e voz numa janela só. Entra, chama o pessoal e fica.</p>
         <ul class="hero-points">
-          <li><strong>Voz</strong>Entre na call e fale enquanto joga.</li>
-          <li><strong>Chat</strong>Canais, mensagens diretas e quem está online.</li>
-          <li><strong>Convite</strong>Um link e seus amigos entram na sala.</li>
+          <li>
+            <span class="point-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a4 4 0 0 0-4 4v5a4 4 0 0 0 8 0V7a4 4 0 0 0-4-4Z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+            </span>
+            <div>
+              <strong>Voz ao vivo</strong>
+              <span>Entra na call e fala enquanto joga.</span>
+            </div>
+          </li>
+          <li>
+            <span class="point-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l.9-5.2A8 8 0 1 1 21 12Z"/></svg>
+            </span>
+            <div>
+              <strong>Chat e DMs</strong>
+              <span>Canais, recados e quem está online.</span>
+            </div>
+          </li>
+          <li>
+            <span class="point-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>
+            </span>
+            <div>
+              <strong>Um link e pronto</strong>
+              <span>Seus amigos entram na sala pelo convite.</span>
+            </div>
+          </li>
         </ul>
       </section>
       <section class="login-card">
-        <h2>Entrar</h2>
-        <p class="card-sub">Use a mesma conta em qualquer computador.</p>
+        <div class="card-glow" aria-hidden="true"></div>
+        <h2>Entrar no Nexus</h2>
+        <p class="card-sub">A mesma conta no navegador ou no app.</p>
         <div id="invite-banner" class="invite-banner hidden"></div>
         <div class="tabs">
           <button class="tab active" data-tab="login" type="button">Entrar</button>
@@ -102,9 +139,9 @@
   </div>
   <div id="toasts" class="toasts"></div>
 
-  <script src="/static/js/sounds.js?v=7"></script>
+  <script src="/static/js/sounds.js?v=10"></script>
   <script src="/static/js/voice.js"></script>
-  <script src="/static/js/app.js?v=8"></script>
-  <script src="/static/js/settings.js?v=7"></script>
+  <script src="/static/js/app.js?v=10"></script>
+  <script src="/static/js/settings.js?v=10"></script>
 </body>
 </html>

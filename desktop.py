@@ -54,7 +54,7 @@ def main() -> None:
         width=1280,
         height=800,
         min_size=(900, 600),
-        background_color="#111214",
+        background_color="#07080d",
     )
     webview.start()
 

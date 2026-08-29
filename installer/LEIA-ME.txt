@@ -1,0 +1,21 @@
+NEXUS — como instalar no computador
+====================================
+
+No SEU PC (quem criou o Nexus)
+  Clique duas vezes em Nexus-Setup.bat  (na pasta do projeto)
+
+Para os AMIGOS
+  1. Mande a pasta "installer" inteira  OU  so o arquivo Nexus-Setup.bat
+     junto com a pasta installer.
+  2. Eles clicam em Nexus-Setup.bat
+  3. Clicam em "Instalar Nexus"
+  4. Abre o atalho Nexus na area de trabalho
+
+O app abre o site:
+  https://nexus-ca9i.onrender.com
+
+Nao precisa Python. Precisa do Microsoft Edge (ja vem no Windows 10/11)
+ou do Google Chrome.
+
+Para remover: abra
+  %LOCALAPPDATA%\Nexus\desinstalar.bat
