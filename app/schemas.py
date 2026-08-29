@@ -39,5 +39,9 @@ class FriendIn(BaseModel):
     username: str = Field(min_length=2, max_length=64)
 
 
+class MessageIn(BaseModel):
+    content: str = Field(min_length=1, max_length=2000)
+
+
 class DmIn(BaseModel):
     user_id: int

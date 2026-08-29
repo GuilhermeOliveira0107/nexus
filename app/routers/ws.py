@@ -75,6 +75,7 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = None):
         )
     )
     await hub.broadcast_online(related, user_id, True)
+    db.close()
 
     try:
         while True:
@@ -83,46 +84,59 @@ async def websocket_endpoint(ws: WebSocket, token: str | None = None):
                 data = json.loads(raw)
             except json.JSONDecodeError:
                 continue
-            await _handle(db, user, data)
+            if data.get("type") == "ping":
+                await hub.send_user(user_id, {"type": "pong"})
+                continue
+            await _handle(user_id, data)
     except WebSocketDisconnect:
         pass
     finally:
         left_voice = hub.voice.get(user_id)
         last_socket = hub.disconnect(user_id, ws)
-        if last_socket:
-            if left_voice:
-                channel = db.get(Channel, left_voice.channel_id)
-                if channel:
-                    await hub.send_users(
-                        _audience_for_channel(db, channel),
-                        {"type": "voice_leave", "user_id": user_id, "channel_id": left_voice.channel_id},
-                    )
-            await hub.broadcast_online(related, user_id, False)
-        db.close()
+        db = SessionLocal()
+        try:
+            if last_socket:
+                if left_voice:
+                    channel = db.get(Channel, left_voice.channel_id)
+                    if channel:
+                        await hub.send_users(
+                            _audience_for_channel(db, channel),
+                            {"type": "voice_leave", "user_id": user_id, "channel_id": left_voice.channel_id},
+                        )
+                related = await _related_user_ids(db, user_id)
+                await hub.broadcast_online(related, user_id, False)
+        finally:
+            db.close()
 
 
-async def _handle(db, user: User, data: dict) -> None:
-    kind = data.get("type")
-    if kind == "ping":
-        await hub.send_user(user.id, {"type": "pong"})
-        return
-    if kind == "message":
-        await _on_message(db, user, data)
-    elif kind == "typing":
-        await _on_typing(db, user, data)
-    elif kind == "voice_join":
-        await _on_voice_join(db, user, data)
-    elif kind == "voice_leave":
-        await _on_voice_leave(db, user)
-    elif kind == "voice_state":
-        await _on_voice_state(db, user, data)
-    elif kind in {"webrtc_offer", "webrtc_answer", "webrtc_ice"}:
-        target_id = data.get("target_id")
-        if not target_id:
+async def _handle(user_id: int, data: dict) -> None:
+    db = SessionLocal()
+    try:
+        user = db.get(User, user_id)
+        if not user:
             return
-        payload = {**data, "from_id": user.id}
-        payload.pop("target_id", None)
-        await hub.send_user(int(target_id), payload)
+        kind = data.get("type")
+        if kind == "message":
+            await _on_message(db, user, data)
+        elif kind == "typing":
+            await _on_typing(db, user, data)
+        elif kind == "voice_join":
+            await _on_voice_join(db, user, data)
+        elif kind == "voice_leave":
+            await _on_voice_leave(db, user)
+        elif kind == "voice_state":
+            await _on_voice_state(db, user, data)
+        elif kind in {"webrtc_offer", "webrtc_answer", "webrtc_ice"}:
+            target_id = data.get("target_id")
+            if not target_id:
+                return
+            payload = {**data, "from_id": user.id}
+            payload.pop("target_id", None)
+            await hub.send_user(int(target_id), payload)
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
 async def _on_message(db, user: User, data: dict) -> None:

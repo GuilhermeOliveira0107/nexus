@@ -1,11 +1,13 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import Channel, Message, Server, ServerMember, User
-from app.realtime import user_public
-from app.schemas import ChannelIn, JoinServerIn, ServerIn
+from app.realtime import hub, user_public
+from app.schemas import ChannelIn, JoinServerIn, MessageIn, ServerIn
 from app.services import (
     can_use_channel,
     create_server_with_channels,
@@ -13,6 +15,7 @@ from app.services import (
     serialize_channel,
     serialize_message,
     serialize_server,
+    server_member_ids,
 )
 
 router = APIRouter(prefix="/api", tags=["servers"])
@@ -124,6 +127,39 @@ def list_members(server_id: int, user: User = Depends(get_current_user), db: Ses
         .all()
     )
     return [user_public(membership.user) for membership in memberships]
+
+
+def _audience_for_channel(db: Session, channel: Channel) -> set[int]:
+    if channel.type == "dm":
+        from app.models import ChannelMember
+
+        return {row[0] for row in db.query(ChannelMember.user_id).filter(ChannelMember.channel_id == channel.id)}
+    if channel.server_id:
+        return server_member_ids(db, channel.server_id)
+    return set()
+
+
+@router.post("/channels/{channel_id}/messages")
+async def post_message(
+    channel_id: int,
+    payload: MessageIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    channel = db.get(Channel, channel_id)
+    if not channel or channel.type == "voice" or not can_use_channel(db, channel, user.id):
+        raise HTTPException(404, "Canal não encontrado.")
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(400, "Escreve alguma coisa.")
+    message = Message(channel_id=channel.id, user_id=user.id, content=content, created_at=datetime.utcnow())
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    message = db.query(Message).options(joinedload(Message.user)).filter(Message.id == message.id).one()
+    payload_out = serialize_message(message)
+    await hub.send_users(_audience_for_channel(db, channel), {"type": "message", **payload_out})
+    return payload_out
 
 
 @router.get("/channels/{channel_id}/messages")

@@ -18,6 +18,8 @@ const state = {
 const voice = new VoiceChat();
 let ws = null;
 let heartbeat = null;
+let liveTimer = null;
+let reconnectTimer = null;
 let typingTimer = null;
 let typingUsers = new Map();
 
@@ -75,6 +77,19 @@ async function copyText(text) {
 
 function send(payload) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+}
+
+function sameChannel(channelId) {
+  return Boolean(state.channel && Number(channelId) === Number(state.channel.id));
+}
+
+function upsertMessage(msg) {
+  if (!msg || !sameChannel(msg.channel_id)) return false;
+  const idx = state.messages.findIndex((m) => Number(m.id) === Number(msg.id) || (m.pending && m.content === msg.content && m.author.id === msg.author.id));
+  if (idx >= 0) state.messages[idx] = msg;
+  else state.messages.push(msg);
+  renderMessages(false);
+  return true;
 }
 
 function inThisCall(channelId) {
@@ -240,18 +255,26 @@ async function refreshAll() {
 
 function connectWs() {
   const token = localStorage.getItem(TOKEN_KEY);
+  if (!token) return;
   const proto = location.protocol === "https:" ? "wss" : "ws";
   if (heartbeat) clearInterval(heartbeat);
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  if (ws) {
+    ws.onclose = null;
+    try { ws.close(); } catch (_) {}
+  }
   ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
   ws.onopen = () => {
-    heartbeat = setInterval(() => send({ type: "ping" }), 25000);
+    heartbeat = setInterval(() => send({ type: "ping" }), 15000);
   };
-  ws.onmessage = (ev) => onEvent(JSON.parse(ev.data));
+  ws.onmessage = (ev) => {
+    try { onEvent(JSON.parse(ev.data)); } catch (_) {}
+  };
   ws.onclose = () => {
     if (heartbeat) clearInterval(heartbeat);
-    setTimeout(() => {
+    reconnectTimer = setTimeout(() => {
       if (localStorage.getItem(TOKEN_KEY)) connectWs();
-    }, 1500);
+    }, 1200);
   };
 }
 
@@ -267,13 +290,10 @@ function onEvent(msg) {
     renderMembers();
     if (state.view === "home") renderFriends();
   } else if (msg.type === "message") {
-    if (state.channel && msg.channel_id === state.channel.id) {
-      state.messages.push(msg);
-      renderMessages(false);
-    }
+    upsertMessage(msg);
     playMessageSound(msg);
   } else if (msg.type === "typing") {
-    if (state.channel && msg.channel_id === state.channel.id) {
+    if (sameChannel(msg.channel_id)) {
       typingUsers.set(msg.user.id, msg.user.display_name);
       renderTyping();
       setTimeout(() => {
@@ -712,6 +732,7 @@ async function openChannel(channel) {
     return;
   }
   state.messages = await api(`/api/channels/${channel.id}/messages`);
+  startLiveSync();
   $("topbar").innerHTML = `<span># ${channel.name}</span><span class="muted grow">${server ? server.name : ""}</span>
     <button class="btn primary" id="top-invite">Convidar</button>`;
   $("top-invite").onclick = showInvitePicker;
@@ -728,6 +749,7 @@ async function openDm(id) {
   state.serverId = null;
   state.channel = channel;
   state.messages = await api(`/api/channels/${id}/messages`);
+  startLiveSync();
   render();
   renderMessages(true);
 }
@@ -775,13 +797,54 @@ function renderTyping() {
   $("typing").textContent = names.length ? `${names.join(", ")} digitando...` : "";
 }
 
-$("composer").addEventListener("submit", (e) => {
+function startLiveSync() {
+  if (liveTimer) clearInterval(liveTimer);
+  liveTimer = setInterval(syncOpenChannel, 2000);
+}
+
+async function syncOpenChannel() {
+  if (!state.channel || state.channel.type === "voice") return;
+  try {
+    const msgs = await api(`/api/channels/${state.channel.id}/messages`);
+    const lastLocal = [...state.messages].reverse().find((m) => !m.pending);
+    const lastRemote = msgs[msgs.length - 1];
+    if ((lastRemote && lastLocal && lastRemote.id === lastLocal.id && msgs.length === state.messages.filter((m) => !m.pending).length)) {
+      return;
+    }
+    const pending = state.messages.filter((m) => m.pending);
+    state.messages = msgs.concat(pending);
+    renderMessages(false);
+  } catch (_) {}
+}
+
+$("composer").addEventListener("submit", async (e) => {
   e.preventDefault();
   const input = $("composer-input");
   const content = input.value.trim();
-  if (!content || !state.channel) return;
-  send({ type: "message", channel_id: state.channel.id, content });
+  if (!content || !state.channel || state.channel.type === "voice") return;
   input.value = "";
+  const optimistic = {
+    id: `tmp-${Date.now()}`,
+    channel_id: state.channel.id,
+    content,
+    created_at: new Date().toISOString(),
+    author: state.me,
+    pending: true,
+  };
+  state.messages.push(optimistic);
+  renderMessages(true);
+  try {
+    const saved = await api(`/api/channels/${state.channel.id}/messages`, {
+      method: "POST",
+      body: { content },
+    });
+    state.messages = state.messages.filter((m) => m.id !== optimistic.id);
+    upsertMessage(saved);
+  } catch (err) {
+    state.messages = state.messages.filter((m) => m.id !== optimistic.id);
+    renderMessages(true);
+    toast(err.message || "Não deu pra enviar. Tenta de novo.");
+  }
 });
 
 $("composer-input").addEventListener("input", () => {
