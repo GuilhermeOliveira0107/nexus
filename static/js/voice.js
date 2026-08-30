@@ -2,6 +2,15 @@ const ICE = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun.cloudflare.com:3478" },
+    {
+      urls: [
+        "turn:openrelay.metered.ca:80",
+        "turn:openrelay.metered.ca:443",
+        "turn:openrelay.metered.ca:443?transport=tcp",
+      ],
+      username: "openrelayproject",
+      credential: "openrelayproject",
+    },
   ],
 };
 
@@ -16,9 +25,11 @@ class VoiceChat {
     this.localStream = null;
     this.screenStream = null;
     this.channelId = null;
+    this.myId = null;
     this.muted = false;
     this.deafened = false;
     this.sharing = false;
+    this.makingOffer = new Set();
     this.onSpeaking = () => {};
     this.onShareChange = () => {};
     this._raf = 0;
@@ -28,11 +39,13 @@ class VoiceChat {
     return this.videos.get(Number(userId));
   }
 
-  async join(channelId, existingPeers, send) {
+  async join(channelId, existingPeers, send, myId) {
     this.send = send;
+    this.myId = myId;
     if (this.channelId === channelId) return;
     await this.leave(false);
     this.channelId = channelId;
+    this.myId = myId;
     this.localStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       video: false,
@@ -72,18 +85,30 @@ class VoiceChat {
     this._emitState();
   }
 
+  _videoSender(pc) {
+    return pc.getSenders().find((sender) => {
+      if (sender.track && sender.track.kind === "video") return true;
+      const params = sender.getParameters ? sender.getParameters() : null;
+      return Boolean(params && params.encodings && !sender.track);
+    }) || pc.getSenders().find((sender) => !sender.track);
+  }
+
   async startShare() {
     if (this.sharing || !this.channelId) return;
     this.screenStream = await navigator.mediaDevices.getDisplayMedia({
       video: { frameRate: 24, width: { max: 1920 }, height: { max: 1080 } },
-      audio: true,
+      audio: false,
     });
+    const videoTrack = this.screenStream.getVideoTracks()[0];
+    if (!videoTrack) throw new Error("Nenhuma tela foi escolhida.");
+    videoTrack.onended = () => { this.stopShare(); };
     this.sharing = true;
-    this.screenStream.getTracks().forEach((track) => {
-      track.onended = () => { this.stopShare(); };
-      for (const pc of this.pcs.values()) pc.addTrack(track, this.screenStream);
-    });
-    for (const id of this.pcs.keys()) await this._offer(id);
+    for (const [id, pc] of this.pcs) {
+      const sender = pc.getSenders().find((item) => !item.track || item.track.kind === "video");
+      if (sender) await sender.replaceTrack(videoTrack);
+      else pc.addTrack(videoTrack, this.screenStream);
+      await this._offer(id);
+    }
     this._emitState();
     this.onShareChange();
   }
@@ -97,11 +122,11 @@ class VoiceChat {
     this.sharing = false;
     if (renegotiate) {
       for (const [id, pc] of this.pcs) {
-        pc.getSenders().forEach((sender) => {
+        for (const sender of pc.getSenders()) {
           if (sender.track && sender.track.kind === "video") {
-            try { pc.removeTrack(sender); } catch (_) {}
+            try { await sender.replaceTrack(null); } catch (_) {}
           }
-        });
+        }
         await this._offer(id);
       }
     }
@@ -120,17 +145,32 @@ class VoiceChat {
     }
   }
 
+  _polite(peerId) {
+    return Number(this.myId) > Number(peerId);
+  }
+
   async onOffer(fromId, sdp) {
     const pc = this._peer(fromId);
-    await pc.setRemoteDescription(sdp);
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    this.send({ type: "webrtc_answer", target_id: fromId, sdp: pc.localDescription });
+    try {
+      if (pc.signalingState !== "stable") {
+        if (!this._polite(fromId)) return;
+        try { await pc.setLocalDescription({ type: "rollback" }); } catch (_) {}
+      }
+      await pc.setRemoteDescription(sdp);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      this.send({ type: "webrtc_answer", target_id: fromId, sdp: pc.localDescription });
+    } catch (_) {}
   }
 
   async onAnswer(fromId, sdp) {
     const pc = this.pcs.get(fromId);
-    if (pc) await pc.setRemoteDescription(sdp);
+    if (!pc) return;
+    try {
+      if (pc.signalingState === "have-local-offer") {
+        await pc.setRemoteDescription(sdp);
+      }
+    } catch (_) {}
   }
 
   async onIce(fromId, candidate) {
@@ -145,6 +185,7 @@ class VoiceChat {
   }
 
   async ensurePeer(userId, myId) {
+    this.myId = myId ?? this.myId;
     if (!this.channelId || userId === myId || this.pcs.has(userId)) return;
     if (myId && userId < myId) return;
     await this._offer(userId);
@@ -157,22 +198,30 @@ class VoiceChat {
       this.localStream.getTracks().forEach((track) => pc.addTrack(track, this.localStream));
     }
     if (this.screenStream) {
-      this.screenStream.getTracks().forEach((track) => pc.addTrack(track, this.screenStream));
+      const videoTrack = this.screenStream.getVideoTracks()[0];
+      if (videoTrack) pc.addTrack(videoTrack, this.screenStream);
     }
     pc.onicecandidate = (event) => {
       if (event.candidate) this.send({ type: "webrtc_ice", target_id: userId, candidate: event.candidate });
     };
     pc.ontrack = (event) => {
-      const stream = event.streams[0] || new MediaStream([event.track]);
-      if (event.track.kind === "video") {
-        this.videos.set(userId, stream);
-        event.track.onended = () => {
-          this.videos.delete(userId);
+      const track = event.track;
+      if (track.kind === "video") {
+        let stream = this.videos.get(userId);
+        if (!stream) {
+          stream = new MediaStream();
+          this.videos.set(Number(userId), stream);
+        }
+        if (!stream.getTrackById(track.id)) stream.addTrack(track);
+        track.onended = () => {
+          stream.removeTrack(track);
+          if (!stream.getVideoTracks().length) this.videos.delete(Number(userId));
           this.onShareChange();
         };
         this.onShareChange();
         return;
       }
+      const stream = event.streams[0] || new MediaStream([track]);
       this.streams.set(userId, stream);
       let audio = this.elements.get(userId);
       if (!audio) {
@@ -190,9 +239,19 @@ class VoiceChat {
 
   async _offer(userId) {
     const pc = this._peer(userId);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    this.send({ type: "webrtc_offer", target_id: userId, sdp: pc.localDescription });
+    if (this.makingOffer.has(userId) || pc.signalingState !== "stable") return;
+    this.makingOffer.add(userId);
+    try {
+      const hasVideo = pc.getTransceivers().some((item) => item.receiver?.track?.kind === "video" || item.sender?.track?.kind === "video");
+      if (!hasVideo) pc.addTransceiver("video", { direction: "sendrecv" });
+      const offer = await pc.createOffer();
+      if (pc.signalingState !== "stable") return;
+      await pc.setLocalDescription(offer);
+      this.send({ type: "webrtc_offer", target_id: userId, sdp: pc.localDescription });
+    } catch (_) {
+    } finally {
+      this.makingOffer.delete(userId);
+    }
   }
 
   _dropPeer(userId) {
@@ -200,7 +259,7 @@ class VoiceChat {
     if (pc) pc.close();
     this.pcs.delete(userId);
     this.streams.delete(userId);
-    this.videos.delete(userId);
+    this.videos.delete(Number(userId));
     const audio = this.elements.get(userId);
     if (audio) {
       audio.srcObject = null;

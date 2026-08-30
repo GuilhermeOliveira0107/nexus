@@ -319,7 +319,7 @@ function onEvent(msg) {
       }, 2500);
     }
   } else if (msg.type === "voice_peers") {
-    voice.join(msg.channel_id, msg.peers, send).then(() => {
+    voice.join(msg.channel_id, msg.peers, send, state.me.id).then(() => {
       if (prefs && prefs.defaultMuted && !voice.muted) voice.setMuted(true);
       if (!prefs || prefs.sfxJoin) Sfx.play("join");
       renderUser();
@@ -345,11 +345,14 @@ function onEvent(msg) {
     }
     refreshVoiceChrome();
   } else if (msg.type === "voice_state") {
-    if (state.voiceStates[msg.user_id]) {
-      state.voiceStates[msg.user_id].muted = msg.muted;
-      state.voiceStates[msg.user_id].deafened = msg.deafened;
-      state.voiceStates[msg.user_id].sharing = msg.sharing;
-    }
+    const uid = msg.user_id;
+    state.voiceStates[uid] = {
+      ...(state.voiceStates[uid] || {}),
+      channel_id: msg.channel_id || state.voiceStates[uid]?.channel_id,
+      muted: msg.muted,
+      deafened: msg.deafened,
+      sharing: msg.sharing,
+    };
     refreshVoiceChrome();
   } else if (msg.type === "webrtc_offer") {
     voice.onOffer(msg.from_id, msg.sdp);
@@ -791,7 +794,7 @@ async function openChannel(channel) {
       const data = await api(`/api/channels/${channel.id}/voice/join`, { method: "POST" });
       applyVoiceOccupants(data.occupants, channel.id);
       if (voice.channelId !== channel.id) {
-        await voice.join(channel.id, data.peers || [], send);
+        await voice.join(channel.id, data.peers || [], send, state.me.id);
       } else {
         for (const peer of data.peers || []) await voice.ensurePeer(peer.id, state.me.id);
       }
@@ -1006,9 +1009,17 @@ function renderMembers() {
 }
 
 function currentSharer() {
-  const people = state.members.filter((m) => state.voiceStates[m.id]?.sharing);
-  if (people.length) return people[0];
   if (voice.sharing) return state.me;
+  const flagged = state.members.find((m) => state.voiceStates[m.id]?.sharing);
+  if (flagged) return flagged;
+  for (const member of state.members) {
+    if (voice.remoteVideo(member.id)) return member;
+  }
+  for (const [id] of voice.videos) {
+    const member = state.members.find((item) => Number(item.id) === Number(id));
+    if (member) return member;
+    return { id, display_name: "Amigo", avatar_color: "#5b7cfa" };
+  }
   return null;
 }
 
@@ -1021,7 +1032,10 @@ function attachScreen() {
     return;
   }
   const stream = Number(sharer.id) === Number(state.me.id) ? voice.screenStream : voice.remoteVideo(sharer.id);
-  if (stream && video.srcObject !== stream) video.srcObject = stream;
+  if (stream && video.srcObject !== stream) {
+    video.srcObject = stream;
+    video.play().catch(() => {});
+  }
 }
 
 async function toggleShare() {
