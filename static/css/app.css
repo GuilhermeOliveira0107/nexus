@@ -73,7 +73,7 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
 }
 .login-orb {
   position: absolute; border-radius: 50%;
-  filter: blur(70px); opacity: .55;
+  filter: blur(40px); opacity: .4;
 }
 .login-orb-a { width: 340px; height: 340px; left: -80px; bottom: -40px; background: #3150d6; }
 .login-orb-b { width: 260px; height: 260px; right: 8%; top: 12%; background: #6d5bff; }
@@ -148,7 +148,6 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
   border: 1px solid var(--line-2);
   border-radius: 20px;
   padding: 32px 28px;
-  backdrop-filter: blur(22px);
   box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.06);
 }
 .card-glow {
@@ -228,6 +227,7 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
   display: grid;
   grid-template-columns: var(--rail) var(--side) 1fr var(--members);
   background: var(--bg-0);
+  contain: layout;
 }
 .app.no-members { grid-template-columns: var(--rail) var(--side) 1fr; }
 .app.no-members .members { display: none; }
@@ -243,10 +243,11 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
   width: 48px; height: 48px; border-radius: 16px;
   background: var(--bg-2); color: var(--text-2);
   display: grid; place-items: center; font-weight: 700;
-  transition: border-radius .18s, background .18s, transform .18s, box-shadow .18s;
+  transition: border-radius .1s, background .1s;
   position: relative;
+  contain: layout;
 }
-.server-btn:hover { border-radius: 14px; transform: translateY(-1px); }
+.server-btn:hover { border-radius: 14px; }
 .server-btn.active {
   border-radius: 14px;
   background: var(--accent); color: #fff;
@@ -350,14 +351,13 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
 .topbar {
   height: 52px; padding: 0 18px; display: flex; align-items: center; gap: 10px;
   border-bottom: 1px solid var(--line); font-weight: 600;
-  background: rgba(18, 20, 28, 0.86);
-  backdrop-filter: blur(12px);
+  background: var(--bg-2);
 }
 .topbar .grow { flex: 1; }
 .topbar .muted { color: var(--muted); font-weight: 400; font-size: 13px; }
 
-.chat-view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.messages { flex: 1; overflow: auto; padding: 18px 20px; }
+.chat-view { flex: 1; display: flex; flex-direction: column; min-height: 0; contain: layout; }
+.messages { flex: 1; overflow: auto; padding: 18px 20px; contain: layout; }
 .msg { display: flex; gap: 14px; padding: 6px 10px; border-radius: 8px; }
 .msg.grouped { padding-top: 0; }
 .msg.grouped .avatar { visibility: hidden; }

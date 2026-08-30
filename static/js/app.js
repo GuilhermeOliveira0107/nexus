@@ -25,6 +25,9 @@ let liveTimer = null;
 let reconnectTimer = null;
 let typingTimer = null;
 let typingUsers = new Map();
+let renderedMsgSig = "";
+let renderedMsgChannel = null;
+let speakTick = 0;
 
 const $ = (id) => document.getElementById(id);
 
@@ -297,13 +300,12 @@ function onEvent(msg) {
   if (msg.type === "pong") return;
   if (msg.type === "hello") {
     state.online = new Set(msg.online || []);
-    state.voiceStates = msg.voice || {};
-    render();
+    if (msg.voice) state.voiceStates = msg.voice;
+    renderMembers();
   } else if (msg.type === "presence") {
     if (msg.online) state.online.add(msg.user_id);
     else state.online.delete(msg.user_id);
     renderMembers();
-    if (state.view === "home") renderFriends();
   } else if (msg.type === "message") {
     upsertMessage(msg);
     playMessageSound(msg);
@@ -333,7 +335,7 @@ function onEvent(msg) {
     if (msg.user.id !== state.me.id && inThisCall(msg.channel_id)) {
       playCallSfx("join");
     }
-    render();
+    refreshVoiceChrome();
   } else if (msg.type === "voice_leave") {
     const leftChannel = msg.channel_id;
     delete state.voiceStates[msg.user_id];
@@ -341,13 +343,13 @@ function onEvent(msg) {
     if (msg.user_id !== state.me.id && inThisCall(leftChannel)) {
       playCallSfx("leave");
     }
-    render();
+    refreshVoiceChrome();
   } else if (msg.type === "voice_state") {
     if (state.voiceStates[msg.user_id]) {
       state.voiceStates[msg.user_id].muted = msg.muted;
       state.voiceStates[msg.user_id].deafened = msg.deafened;
     }
-    render();
+    refreshVoiceChrome();
   } else if (msg.type === "webrtc_offer") {
     voice.onOffer(msg.from_id, msg.sdp);
   } else if (msg.type === "webrtc_answer") {
@@ -357,11 +359,23 @@ function onEvent(msg) {
   }
 }
 
+function refreshVoiceChrome() {
+  if (state.view === "server") {
+    renderServerSidebar();
+    renderMembers();
+    if (state.channel && state.channel.type === "voice") renderVoiceRoom();
+  }
+  renderVoiceBar();
+}
+
 voice.onSpeaking = () => {
+  const now = performance.now();
+  if (now - speakTick < 100) return;
+  speakTick = now;
   document.querySelectorAll("[data-speak]").forEach((el) => {
     const id = el.dataset.speak;
     const on = id === "me" ? voice.speaking.has("me") : voice.speaking.has(Number(id));
-    el.classList.toggle("speaking", on);
+    if (el.classList.contains("speaking") !== on) el.classList.toggle("speaking", on);
   });
 };
 
@@ -409,9 +423,6 @@ function renderServers() {
     </button>
   `).join("");
   $("home-btn").classList.toggle("active", state.view === "home" || state.view === "dm");
-  $("server-list").querySelectorAll("[data-server]").forEach((btn) => {
-    btn.onclick = () => openServer(Number(btn.dataset.server));
-  });
 }
 
 $("home-btn").onclick = () => {
@@ -438,18 +449,6 @@ function renderUser() {
       <button class="icon-btn" id="settings-btn" title="Configurações">${gearIcon()}</button>
     </div>
   `;
-  $("user-card").onclick = showSettings;
-  $("mute-btn").onclick = () => {
-    toggleMute();
-    renderUser();
-    renderVoiceBar();
-  };
-  $("deaf-btn").onclick = () => {
-    toggleDeafen();
-    renderUser();
-    renderVoiceBar();
-  };
-  $("settings-btn").onclick = showSettings;
 }
 
 function gearIcon() {
@@ -494,8 +493,6 @@ function renderVoiceBar() {
       <button class="icon-btn danger" id="v-leave">⏏</button>
     </div>
   `;
-  $("v-mute").onclick = () => { toggleMute(); render(); };
-  $("v-leave").onclick = async () => { await leaveCall(); render(); };
 }
 
 function findVoiceChannels() {
@@ -513,20 +510,8 @@ function renderHomeSidebar() {
       </button>
     `).join("") || `<p class="empty" style="padding:8px">Nenhuma conversa ainda.</p>`}
   `;
-  const friendsNav = $("friends-nav");
-  if (friendsNav) {
-    friendsNav.onclick = () => {
-      state.view = "home";
-      state.channel = null;
-      render();
-    };
-  }
-  $("sidebar-scroll").querySelectorAll("[data-dm]").forEach((btn) => {
-    btn.onclick = () => openDm(Number(btn.dataset.dm));
-  });
   $("topbar").innerHTML = `<span>Amigos</span><span class="muted grow">Adicione pelo nome de usuário ou envie um convite.</span>
     <button class="btn primary" id="invite-home">Convidar</button>`;
-  $("invite-home").onclick = () => showInvitePicker();
 }
 
 function renderFriends() {
@@ -730,13 +715,6 @@ function renderServerSidebar() {
     <div class="cat">CANAIS DE VOZ ${owner ? `<button id="add-voice" type="button">+</button>` : ""}</div>
     ${voices.map((c) => channelBtn(c) + voiceOccupants(c.id)).join("")}
   `;
-  $("sidebar-scroll").querySelectorAll("[data-ch]").forEach((btn) => {
-    btn.onclick = () => openChannel(state.channels.find((c) => c.id === Number(btn.dataset.ch)));
-  });
-  const addText = $("add-text");
-  const addVoice = $("add-voice");
-  if (addText) addText.onclick = () => promptChannel("text");
-  if (addVoice) addVoice.onclick = () => promptChannel("voice");
 }
 
 function channelBtn(c) {
@@ -798,7 +776,6 @@ async function openChannel(channel) {
   if (channel.type === "voice") {
     $("topbar").innerHTML = `<span>🔊 ${channel.name}</span><span class="muted grow">Você está neste canal de voz.</span>
       <button class="btn primary" id="top-invite">Convidar</button>`;
-    $("top-invite").onclick = showInvitePicker;
     send({ type: "voice_join", channel_id: channel.id });
     startLiveSync();
     try {
@@ -822,7 +799,6 @@ async function openChannel(channel) {
   startLiveSync();
   $("topbar").innerHTML = `<span># ${channel.name}</span><span class="muted grow">${server ? server.name : ""}</span>
     <button class="btn primary" id="top-invite">Convidar</button>`;
-  $("top-invite").onclick = showInvitePicker;
   $("composer-input").placeholder = `Conversar em #${channel.name}`;
   render();
   renderMessages(true);
@@ -849,18 +825,23 @@ async function openDm(id) {
   renderMessages(true);
 }
 
-function renderMessages(stick) {
-  const box = $("messages");
-  if (!state.channel) return;
-  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+function messageSig() {
+  return state.messages.map((m) => m.id).join(",");
+}
+
+function welcomeHtml() {
   const title = state.channel.type === "dm" ? state.channel.peer.display_name : state.channel.name;
-  let html = `<div class="welcome"><div class="avatar" style="width:68px;height:68px;font-size:26px;background:${state.channel.type === "dm" ? state.channel.peer.avatar_color : "#5b7cfa"}">${initials(title)}</div>
+  return `<div class="welcome"><div class="avatar" style="width:68px;height:68px;font-size:26px;background:${state.channel.type === "dm" ? state.channel.peer.avatar_color : "#5b7cfa"}">${initials(title)}</div>
     <h2>${state.channel.type === "dm" ? title : "Bem-vindo a #" + title}</h2>
     <p>${state.channel.type === "dm" ? "Começo da conversa." : "Este é o início do canal."}</p></div>`;
-  let lastDay = "";
-  let lastAuthor = null;
-  let lastTime = 0;
-  for (const msg of state.messages) {
+}
+
+function messagesHtml(list, from) {
+  let html = "";
+  let lastDay = from?.day || "";
+  let lastAuthor = from?.author ?? null;
+  let lastTime = from?.time || 0;
+  for (const msg of list) {
     const date = new Date(msg.created_at);
     const day = date.toLocaleDateString("pt-BR");
     if (day !== lastDay) {
@@ -879,7 +860,34 @@ function renderMessages(stick) {
     lastAuthor = msg.author.id;
     lastTime = date.getTime();
   }
-  box.innerHTML = html;
+  return html;
+}
+
+function renderMessages(stick) {
+  const box = $("messages");
+  if (!box || !state.channel) return;
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+  const sig = messageSig();
+  if (renderedMsgChannel !== state.channel.id) {
+    renderedMsgChannel = state.channel.id;
+    box.innerHTML = welcomeHtml() + messagesHtml(state.messages);
+    renderedMsgSig = sig;
+    box.scrollTop = box.scrollHeight;
+    return;
+  }
+  if (sig === renderedMsgSig) {
+    if (stick || nearBottom) box.scrollTop = box.scrollHeight;
+    return;
+  }
+  if (renderedMsgSig && sig.startsWith(renderedMsgSig)) {
+    const add = state.messages.slice(renderedMsgSig ? renderedMsgSig.split(",").filter(Boolean).length : 0);
+    box.insertAdjacentHTML("beforeend", messagesHtml(add));
+    renderedMsgSig = sig;
+    if (stick || nearBottom) box.scrollTop = box.scrollHeight;
+    return;
+  }
+  box.innerHTML = welcomeHtml() + messagesHtml(state.messages);
+  renderedMsgSig = sig;
   if (stick || nearBottom) box.scrollTop = box.scrollHeight;
 }
 
@@ -894,7 +902,9 @@ function renderTyping() {
 
 function startLiveSync() {
   if (liveTimer) clearInterval(liveTimer);
-  liveTimer = setInterval(syncOpenChannel, 3000);
+  liveTimer = setInterval(() => {
+    if (!document.hidden) syncOpenChannel();
+  }, 4000);
 }
 
 function voiceSignature(occupants) {
@@ -1009,7 +1019,62 @@ function renderVoiceRoom() {
   `;
 }
 
+function bindChrome() {
+  $("server-list").onclick = (e) => {
+    const btn = e.target.closest("[data-server]");
+    if (btn) openServer(Number(btn.dataset.server));
+  };
+  $("sidebar-scroll").onclick = (e) => {
+    if (e.target.closest("#friends-nav")) {
+      state.view = "home";
+      state.channel = null;
+      render();
+      return;
+    }
+    if (e.target.closest("#add-text")) return promptChannel("text");
+    if (e.target.closest("#add-voice")) return promptChannel("voice");
+    const ch = e.target.closest("[data-ch]");
+    if (ch) {
+      const channel = state.channels.find((c) => c.id === Number(ch.dataset.ch));
+      if (channel) openChannel(channel);
+      return;
+    }
+    const dm = e.target.closest("[data-dm]");
+    if (dm) openDm(Number(dm.dataset.dm));
+  };
+  $("topbar").onclick = (e) => {
+    if (e.target.closest("#invite-home") || e.target.closest("#top-invite")) showInvitePicker();
+  };
+  $("user-panel").onclick = (e) => {
+    if (e.target.closest("#mute-btn")) {
+      toggleMute();
+      renderUser();
+      renderVoiceBar();
+      return;
+    }
+    if (e.target.closest("#deaf-btn")) {
+      toggleDeafen();
+      renderUser();
+      renderVoiceBar();
+      return;
+    }
+    if (e.target.closest("#user-card") || e.target.closest("#settings-btn")) showSettings();
+  };
+  $("voice-bar").onclick = (e) => {
+    if (e.target.closest("#v-mute")) {
+      toggleMute();
+      renderUser();
+      renderVoiceBar();
+    }
+    if (e.target.closest("#v-leave")) leaveCall().then(() => render());
+  };
+}
+
 /* ---------- boot ---------- */
+bindChrome();
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && state.channel) syncOpenChannel();
+});
 bootInviteBanner();
 (async function boot() {
   const token = localStorage.getItem(TOKEN_KEY);

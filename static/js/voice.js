@@ -163,15 +163,20 @@ class VoiceChat {
   }
 
   _loop() {
+    let n = 0;
     const tick = () => {
-      const next = new Set();
-      for (const [id, pack] of this.analysers) {
-        pack.analyser.getByteFrequencyData(pack.data);
-        const avg = pack.data.reduce((a, b) => a + b, 0) / pack.data.length;
-        if (avg > 14) next.add(id === "local" ? "me" : Number(id));
+      n += 1;
+      if (n % 4 === 0) {
+        const next = new Set();
+        for (const [id, pack] of this.analysers) {
+          pack.analyser.getByteFrequencyData(pack.data);
+          let sum = 0;
+          for (let i = 0; i < pack.data.length; i += 4) sum += pack.data[i];
+          if (sum / (pack.data.length / 4) > 14) next.add(id === "local" ? "me" : Number(id));
+        }
+        this.speaking = next;
+        this.onSpeaking(next);
       }
-      this.speaking = next;
-      this.onSpeaking(next);
       this._raf = requestAnimationFrame(tick);
     };
     this._raf = requestAnimationFrame(tick);
