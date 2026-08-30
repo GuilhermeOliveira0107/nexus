@@ -331,7 +331,7 @@ function onEvent(msg) {
         : err.message);
     });
   } else if (msg.type === "voice_join") {
-    state.voiceStates[msg.user.id] = { channel_id: msg.channel_id, muted: msg.muted, deafened: msg.deafened };
+    state.voiceStates[msg.user.id] = { channel_id: msg.channel_id, muted: msg.muted, deafened: msg.deafened, sharing: msg.sharing };
     if (msg.user.id !== state.me.id && inThisCall(msg.channel_id)) {
       playCallSfx("join");
     }
@@ -348,6 +348,7 @@ function onEvent(msg) {
     if (state.voiceStates[msg.user_id]) {
       state.voiceStates[msg.user_id].muted = msg.muted;
       state.voiceStates[msg.user_id].deafened = msg.deafened;
+      state.voiceStates[msg.user_id].sharing = msg.sharing;
     }
     refreshVoiceChrome();
   } else if (msg.type === "webrtc_offer") {
@@ -366,7 +367,10 @@ function refreshVoiceChrome() {
     if (state.channel && state.channel.type === "voice") renderVoiceRoom();
   }
   renderVoiceBar();
+  attachScreen();
 }
+
+voice.onShareChange = () => refreshVoiceChrome();
 
 voice.onSpeaking = () => {
   const now = performance.now();
@@ -471,6 +475,10 @@ function sfxIcon(on) {
     : `<svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 12c0-1.8-1-3.3-2.5-4v2.2l2.5 2.5V12Zm2.5 6.1-1.4 1.4-2.1-2.1A7 7 0 0 1 14 18.9v2.1A9 9 0 0 0 18.1 17l.9 1.1ZM4.3 3 3 4.3 7.7 9H3v6h4l5 5v-6.7l4.7 4.7 1.3-1.3L4.3 3ZM14 8.2 12 6.2V4L9.8 6.2 14 10.4V8.2Z"/></svg>`;
 }
 
+function screenIcon() {
+  return `<svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M21 3H3c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h7v2H8v2h8v-2h-2v-2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2Zm0 13H3V5h18v11Z"/></svg>`;
+}
+
 function deafIcon(on) {
   return on
     ? `<svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M3 10v4h4l5 5V5L7 10H3Zm13.5 2c0-1.8-1-3.3-2.5-4v8c1.5-.7 2.5-2.2 2.5-4ZM14 3.2v2.1A7 7 0 0 1 19 12a7 7 0 0 1-2.1 5l1.5 1.5A9 9 0 0 0 21 12c0-4.3-3-7.9-7-8.8Z"/></svg>`
@@ -490,6 +498,7 @@ function renderVoiceBar() {
     <span>${channel ? channel.name : "Voz"}</span>
     <div class="voice-actions">
       <button class="icon-btn ${voice.muted ? "on" : ""}" id="v-mute">${micIcon(voice.muted)}</button>
+      <button class="icon-btn ${voice.sharing ? "on" : ""}" id="v-share" title="${voice.sharing ? "Parar tela" : "Compartilhar tela"}">${screenIcon()}</button>
       <button class="icon-btn danger" id="v-leave">⏏</button>
     </div>
   `;
@@ -757,7 +766,7 @@ function applyVoiceOccupants(occupants, channelId) {
   const ids = new Set();
   for (const person of occupants || []) {
     ids.add(Number(person.id));
-    state.voiceStates[person.id] = { channel_id: cid, muted: person.muted, deafened: person.deafened };
+    state.voiceStates[person.id] = { channel_id: cid, muted: person.muted, deafened: person.deafened, sharing: person.sharing };
     if (!state.members.some((m) => Number(m.id) === Number(person.id))) state.members.push(person);
   }
   for (const key of Object.keys(state.voiceStates)) {
@@ -908,7 +917,7 @@ function startLiveSync() {
 }
 
 function voiceSignature(occupants) {
-  return (occupants || []).map((p) => `${p.id}:${p.muted ? 1 : 0}:${p.deafened ? 1 : 0}`).sort().join(",");
+  return (occupants || []).map((p) => `${p.id}:${p.muted ? 1 : 0}:${p.deafened ? 1 : 0}:${p.sharing ? 1 : 0}`).sort().join(",");
 }
 
 async function syncOpenChannel() {
@@ -996,6 +1005,42 @@ function renderMembers() {
   `;
 }
 
+function currentSharer() {
+  const people = state.members.filter((m) => state.voiceStates[m.id]?.sharing);
+  if (people.length) return people[0];
+  if (voice.sharing) return state.me;
+  return null;
+}
+
+function attachScreen() {
+  const video = $("screen-stage");
+  if (!video) return;
+  const sharer = currentSharer();
+  if (!sharer) {
+    video.srcObject = null;
+    return;
+  }
+  const stream = Number(sharer.id) === Number(state.me.id) ? voice.screenStream : voice.remoteVideo(sharer.id);
+  if (stream && video.srcObject !== stream) video.srcObject = stream;
+}
+
+async function toggleShare() {
+  if (!voice.channelId) return toast("Entra numa call primeiro.");
+  try {
+    if (voice.sharing) await voice.stopShare();
+    else await voice.startShare();
+    state.voiceStates[state.me.id] = {
+      ...(state.voiceStates[state.me.id] || {}),
+      channel_id: voice.channelId,
+      sharing: voice.sharing,
+    };
+    refreshVoiceChrome();
+  } catch (err) {
+    if (err.name === "NotAllowedError") toast("Você cancelou ou o navegador bloqueou a tela.");
+    else toast(err.message || "Não deu pra compartilhar a tela.");
+  }
+}
+
 function renderVoiceRoom() {
   const channel = state.channel;
   const people = state.members.filter((m) => state.voiceStates[m.id]?.channel_id === channel.id);
@@ -1003,20 +1048,34 @@ function renderVoiceRoom() {
     people.unshift(state.me);
   }
   const alone = state.members.length < 2;
+  const sharer = currentSharer();
   $("voice-view").innerHTML = `
     <h2>🔊 ${channel.name}</h2>
     <p class="lead">Quem estiver neste canal consegue te ouvir. Permita o microfone quando o navegador pedir.</p>
     ${alone ? `<div class="solo-hint"><strong>Só você nesta sala.</strong> O amigo precisa entrar com o <em>seu</em> convite — se ele criou a própria sala, vocês ficam em calls diferentes. Clica em Convidar e manda o link.</div>` : ""}
+    <div class="share-actions">
+      <button class="btn ${voice.sharing ? "danger" : "primary"}" id="share-btn" type="button">${voice.sharing ? "Parar de compartilhar" : "Compartilhar tela"}</button>
+    </div>
+    ${sharer ? `
+      <div class="screen-stage-wrap">
+        <video id="screen-stage" autoplay playsinline muted></video>
+        <div class="screen-stage-meta">
+          <span>${esc(sharer.display_name)} está compartilhando a tela</span>
+          <button class="btn ghost" id="screen-full" type="button">Tela cheia</button>
+        </div>
+      </div>
+    ` : ""}
     <div class="tiles">
       ${people.map((p) => {
         const vs = state.voiceStates[p.id] || {};
-        return `<div class="tile" data-speak="${p.id === state.me.id ? "me" : p.id}">
+        return `<div class="tile ${vs.sharing ? "sharing" : ""}" data-speak="${p.id === state.me.id ? "me" : p.id}">
           ${avatar(p)}<b>${p.display_name}</b>
-          <small>${vs.muted ? "microfone off" : "na call"}</small>
+          <small>${vs.sharing ? "compartilhando" : vs.muted ? "microfone off" : "na call"}</small>
         </div>`;
       }).join("") || `<p class="empty">Ninguém na call ainda. Entra e espera a galera.</p>`}
     </div>
   `;
+  attachScreen();
 }
 
 function bindChrome() {
@@ -1066,7 +1125,15 @@ function bindChrome() {
       renderUser();
       renderVoiceBar();
     }
+    if (e.target.closest("#v-share")) toggleShare();
     if (e.target.closest("#v-leave")) leaveCall().then(() => render());
+  };
+  $("voice-view").onclick = (e) => {
+    if (e.target.closest("#share-btn")) toggleShare();
+    if (e.target.closest("#screen-full")) {
+      const video = $("screen-stage");
+      if (video && video.requestFullscreen) video.requestFullscreen();
+    }
   };
 }
 

@@ -10,14 +10,22 @@ class VoiceChat {
     this.pcs = new Map();
     this.streams = new Map();
     this.elements = new Map();
+    this.videos = new Map();
     this.analysers = new Map();
     this.speaking = new Set();
     this.localStream = null;
+    this.screenStream = null;
     this.channelId = null;
     this.muted = false;
     this.deafened = false;
+    this.sharing = false;
     this.onSpeaking = () => {};
+    this.onShareChange = () => {};
     this._raf = 0;
+  }
+
+  remoteVideo(userId) {
+    return this.videos.get(Number(userId));
   }
 
   async join(channelId, existingPeers, send) {
@@ -38,6 +46,7 @@ class VoiceChat {
   }
 
   async leave(notify = true) {
+    await this.stopShare(false);
     this.channelId = null;
     for (const [userId] of [...this.pcs]) this._dropPeer(userId);
     if (this.localStream) {
@@ -52,7 +61,7 @@ class VoiceChat {
   setMuted(muted) {
     this.muted = muted;
     this._applyTracks();
-    if (this.send) this.send({ type: "voice_state", muted: this.muted, deafened: this.deafened });
+    this._emitState();
   }
 
   setDeafened(deafened) {
@@ -60,7 +69,55 @@ class VoiceChat {
     if (deafened) this.muted = true;
     this._applyTracks();
     for (const el of this.elements.values()) el.muted = deafened;
-    if (this.send) this.send({ type: "voice_state", muted: this.muted, deafened: this.deafened });
+    this._emitState();
+  }
+
+  async startShare() {
+    if (this.sharing || !this.channelId) return;
+    this.screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 24, width: { max: 1920 }, height: { max: 1080 } },
+      audio: true,
+    });
+    this.sharing = true;
+    this.screenStream.getTracks().forEach((track) => {
+      track.onended = () => { this.stopShare(); };
+      for (const pc of this.pcs.values()) pc.addTrack(track, this.screenStream);
+    });
+    for (const id of this.pcs.keys()) await this._offer(id);
+    this._emitState();
+    this.onShareChange();
+  }
+
+  async stopShare(renegotiate = true) {
+    if (!this.sharing && !this.screenStream) return;
+    if (this.screenStream) {
+      this.screenStream.getTracks().forEach((track) => track.stop());
+      this.screenStream = null;
+    }
+    this.sharing = false;
+    if (renegotiate) {
+      for (const [id, pc] of this.pcs) {
+        pc.getSenders().forEach((sender) => {
+          if (sender.track && sender.track.kind === "video") {
+            try { pc.removeTrack(sender); } catch (_) {}
+          }
+        });
+        await this._offer(id);
+      }
+    }
+    this._emitState();
+    this.onShareChange();
+  }
+
+  _emitState() {
+    if (this.send) {
+      this.send({
+        type: "voice_state",
+        muted: this.muted,
+        deafened: this.deafened,
+        sharing: this.sharing,
+      });
+    }
   }
 
   async onOffer(fromId, sdp) {
@@ -99,11 +156,23 @@ class VoiceChat {
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => pc.addTrack(track, this.localStream));
     }
+    if (this.screenStream) {
+      this.screenStream.getTracks().forEach((track) => pc.addTrack(track, this.screenStream));
+    }
     pc.onicecandidate = (event) => {
       if (event.candidate) this.send({ type: "webrtc_ice", target_id: userId, candidate: event.candidate });
     };
     pc.ontrack = (event) => {
-      const stream = event.streams[0];
+      const stream = event.streams[0] || new MediaStream([event.track]);
+      if (event.track.kind === "video") {
+        this.videos.set(userId, stream);
+        event.track.onended = () => {
+          this.videos.delete(userId);
+          this.onShareChange();
+        };
+        this.onShareChange();
+        return;
+      }
       this.streams.set(userId, stream);
       let audio = this.elements.get(userId);
       if (!audio) {
@@ -131,6 +200,7 @@ class VoiceChat {
     if (pc) pc.close();
     this.pcs.delete(userId);
     this.streams.delete(userId);
+    this.videos.delete(userId);
     const audio = this.elements.get(userId);
     if (audio) {
       audio.srcObject = null;
@@ -153,6 +223,7 @@ class VoiceChat {
 
   _watchRemote(id, stream) {
     try {
+      if (!stream.getAudioTracks().length) return;
       const ctx = new AudioContext();
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();

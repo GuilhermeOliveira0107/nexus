@@ -20,6 +20,7 @@ class VoiceState:
     channel_id: int
     muted: bool = False
     deafened: bool = False
+    sharing: bool = False
 
 
 @dataclass
@@ -77,6 +78,7 @@ class Hub:
                 "channel_id": state.channel_id,
                 "muted": state.muted,
                 "deafened": state.deafened,
+                "sharing": state.sharing,
             }
             for uid, state in self.voice.items()
         }
@@ -90,7 +92,12 @@ class Hub:
                 continue
             user = db.get(User, uid)
             if user:
-                people.append({**user_public(user), "muted": state.muted, "deafened": state.deafened})
+                people.append({
+                    **user_public(user),
+                    "muted": state.muted,
+                    "deafened": state.deafened,
+                    "sharing": state.sharing,
+                })
         return people
 
 

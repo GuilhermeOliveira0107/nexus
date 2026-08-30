@@ -198,7 +198,12 @@ async def _on_voice_join(db, user: User, data: dict) -> None:
         peer = db.get(User, peer_id)
         state = hub.voice[peer_id]
         if peer:
-            peers.append({**user_public(peer), "muted": state.muted, "deafened": state.deafened})
+            peers.append({
+                **user_public(peer),
+                "muted": state.muted,
+                "deafened": state.deafened,
+                "sharing": state.sharing,
+            })
 
     await hub.send_user(
         user.id,
@@ -212,6 +217,7 @@ async def _on_voice_join(db, user: User, data: dict) -> None:
             "user": user_public(user),
             "muted": False,
             "deafened": False,
+            "sharing": False,
         },
     )
 
@@ -235,6 +241,8 @@ async def _on_voice_state(db, user: User, data: dict) -> None:
         return
     state.muted = bool(data.get("muted"))
     state.deafened = bool(data.get("deafened"))
+    if "sharing" in data:
+        state.sharing = bool(data.get("sharing"))
     channel = db.get(Channel, state.channel_id)
     if not channel:
         return
@@ -246,5 +254,6 @@ async def _on_voice_state(db, user: User, data: dict) -> None:
             "channel_id": channel.id,
             "muted": state.muted,
             "deafened": state.deafened,
+            "sharing": state.sharing,
         },
     )

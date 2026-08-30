@@ -393,6 +393,32 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
 .person small { color: var(--muted); }
 .empty { color: var(--muted); padding: 16px 0; }
 
+.share-actions { display: flex; gap: 8px; margin: 4px 0 16px; }
+.screen-stage-wrap {
+  margin: 0 0 20px;
+  background: #05060a;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  max-width: 920px;
+}
+.screen-stage-wrap video {
+  display: block;
+  width: 100%;
+  max-height: min(62vh, 720px);
+  background: #000;
+  object-fit: contain;
+}
+.screen-stage-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.tile.sharing { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .solo-hint {
   margin: 0 0 16px;
   padding: 14px 16px;
