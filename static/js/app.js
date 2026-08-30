@@ -132,7 +132,11 @@ function toggleDeafen() {
 
 async function leaveCall() {
   if (!prefs || prefs.sfxDisconnect) Sfx.play("disconnect");
+  const cid = voice.channelId;
   await voice.leave(true);
+  if (cid) {
+    try { await api(`/api/channels/${cid}/voice/leave`, { method: "POST" }); } catch (_) {}
+  }
 }
 
 function publicUrl() {
@@ -232,14 +236,22 @@ $("register-form").addEventListener("submit", async (e) => {
 /* ---------- app shell ---------- */
 async function startApp() {
   showLogin(false);
+  if (state.invite) {
+    try {
+      await api("/api/servers/join", { method: "POST", body: { invite_code: state.invite } });
+    } catch (_) {}
+  }
   await refreshAll();
   connectWs();
   if (state.invite && state.servers.length) {
-    const joined = state.servers.find((s) => s.invite_code === state.invite.toUpperCase());
-    if (joined) openServer(joined.id);
-  } else {
-    render();
+    const code = state.invite.toUpperCase().replace(/-/g, "");
+    const joined = state.servers.find((s) => (s.invite_code || "").toUpperCase() === code);
+    if (joined) {
+      history.replaceState({}, "", "/");
+      return openServer(joined.id);
+    }
   }
+  render();
 }
 
 async function refreshAll() {
@@ -720,6 +732,24 @@ function promptChannel(type) {
   };
 }
 
+function applyVoiceOccupants(occupants, channelId) {
+  const cid = Number(channelId || state.channel?.id);
+  const ids = new Set();
+  for (const person of occupants || []) {
+    ids.add(Number(person.id));
+    state.voiceStates[person.id] = { channel_id: cid, muted: person.muted, deafened: person.deafened };
+    if (!state.members.some((m) => Number(m.id) === Number(person.id))) state.members.push(person);
+  }
+  for (const key of Object.keys(state.voiceStates)) {
+    const st = state.voiceStates[key];
+    if (Number(st.channel_id) !== cid) continue;
+    if (!ids.has(Number(key))) {
+      delete state.voiceStates[key];
+      voice.drop(Number(key));
+    }
+  }
+}
+
 async function openChannel(channel) {
   state.channel = channel;
   const server = state.servers.find((s) => s.id === state.serverId);
@@ -727,7 +757,21 @@ async function openChannel(channel) {
     $("topbar").innerHTML = `<span>🔊 ${channel.name}</span><span class="muted grow">Você está neste canal de voz.</span>
       <button class="btn primary" id="top-invite">Convidar</button>`;
     $("top-invite").onclick = showInvitePicker;
-    if (voice.channelId !== channel.id) send({ type: "voice_join", channel_id: channel.id });
+    send({ type: "voice_join", channel_id: channel.id });
+    startLiveSync();
+    try {
+      const data = await api(`/api/channels/${channel.id}/voice/join`, { method: "POST" });
+      applyVoiceOccupants(data.occupants, channel.id);
+      if (voice.channelId !== channel.id) {
+        await voice.join(channel.id, data.peers || [], send);
+      } else {
+        for (const peer of data.peers || []) await voice.ensurePeer(peer.id, state.me.id);
+      }
+    } catch (err) {
+      toast(err.name === "NotAllowedError" || err.name === "NotFoundError"
+        ? "Libere o microfone no navegador."
+        : err.message);
+    }
     render();
     return;
   }
@@ -803,7 +847,21 @@ function startLiveSync() {
 }
 
 async function syncOpenChannel() {
-  if (!state.channel || state.channel.type === "voice") return;
+  if (!state.channel) return;
+  if (state.channel.type === "voice") {
+    try {
+      const data = await api(`/api/channels/${state.channel.id}/voice`);
+      applyVoiceOccupants(data.occupants, state.channel.id);
+      if (voice.channelId === state.channel.id) {
+        for (const peer of data.occupants || []) {
+          if (peer.id !== state.me.id) await voice.ensurePeer(peer.id, state.me.id);
+        }
+      }
+      renderVoiceBar();
+      render();
+    } catch (_) {}
+    return;
+  }
   try {
     const msgs = await api(`/api/channels/${state.channel.id}/messages`);
     const lastLocal = [...state.messages].reverse().find((m) => !m.pending);
@@ -873,9 +931,11 @@ function renderVoiceRoom() {
   if (!people.find((p) => p.id === state.me.id) && voice.channelId === channel.id) {
     people.unshift(state.me);
   }
+  const alone = state.members.length < 2;
   $("voice-view").innerHTML = `
     <h2>🔊 ${channel.name}</h2>
     <p class="lead">Quem estiver neste canal consegue te ouvir. Permita o microfone quando o navegador pedir.</p>
+    ${alone ? `<div class="solo-hint"><strong>Só você nesta sala.</strong> O amigo precisa entrar com o <em>seu</em> convite — se ele criou a própria sala, vocês ficam em calls diferentes. Clica em Convidar e manda o link.</div>` : ""}
     <div class="tiles">
       ${people.map((p) => {
         const vs = state.voiceStates[p.id] || {};

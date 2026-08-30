@@ -393,6 +393,17 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
 .person small { color: var(--muted); }
 .empty { color: var(--muted); padding: 16px 0; }
 
+.solo-hint {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(91, 124, 250, 0.12);
+  border: 1px solid rgba(91, 124, 250, 0.28);
+  color: var(--text-2);
+  line-height: 1.5;
+  max-width: 560px;
+}
+.solo-hint em { color: #c5ceff; font-style: normal; font-weight: 600; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 12px; margin-top: 16px; }
 .tile {
   background: var(--bg-1); border: 1px solid var(--line);

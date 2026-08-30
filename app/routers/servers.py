@@ -129,6 +129,47 @@ def list_members(server_id: int, user: User = Depends(get_current_user), db: Ses
     return [user_public(membership.user) for membership in memberships]
 
 
+@router.get("/channels/{channel_id}/voice")
+def list_voice(
+    channel_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    channel = db.get(Channel, channel_id)
+    if not channel or channel.type != "voice" or not can_use_channel(db, channel, user.id):
+        raise HTTPException(404, "Canal não encontrado.")
+    return {"occupants": hub.occupants(db, channel.id)}
+
+
+@router.post("/channels/{channel_id}/voice/join")
+async def rest_voice_join(
+    channel_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.routers.ws import _on_voice_join
+
+    channel = db.get(Channel, channel_id)
+    if not channel or channel.type != "voice" or not can_use_channel(db, channel, user.id):
+        raise HTTPException(404, "Canal não encontrado.")
+    await _on_voice_join(db, user, {"channel_id": channel.id})
+    occupants = hub.occupants(db, channel.id)
+    peers = [p for p in occupants if p["id"] != user.id]
+    return {"channel_id": channel.id, "peers": peers, "occupants": occupants}
+
+
+@router.post("/channels/{channel_id}/voice/leave")
+async def rest_voice_leave(
+    channel_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.routers.ws import _on_voice_leave
+
+    await _on_voice_leave(db, user)
+    return {"ok": True}
+
+
 def _audience_for_channel(db: Session, channel: Channel) -> set[int]:
     if channel.type == "dm":
         from app.models import ChannelMember

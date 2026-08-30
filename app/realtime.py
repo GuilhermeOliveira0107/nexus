@@ -81,5 +81,17 @@ class Hub:
             for uid, state in self.voice.items()
         }
 
+    def occupants(self, db, channel_id: int) -> list[dict]:
+        from app.models import User
+
+        people = []
+        for uid, state in self.voice.items():
+            if state.channel_id != channel_id:
+                continue
+            user = db.get(User, uid)
+            if user:
+                people.append({**user_public(user), "muted": state.muted, "deafened": state.deafened})
+        return people
+
 
 hub = Hub()

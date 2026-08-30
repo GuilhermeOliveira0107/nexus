@@ -87,6 +87,12 @@ class VoiceChat {
     this._dropPeer(userId);
   }
 
+  async ensurePeer(userId, myId) {
+    if (!this.channelId || userId === myId || this.pcs.has(userId)) return;
+    if (myId && userId < myId) return;
+    await this._offer(userId);
+  }
+
   _peer(userId) {
     if (this.pcs.has(userId)) return this.pcs.get(userId);
     const pc = new RTCPeerConnection(ICE);
