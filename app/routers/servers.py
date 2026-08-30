@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user
@@ -29,11 +30,16 @@ def list_servers(user: User = Depends(get_current_user), db: Session = Depends(g
         .filter(ServerMember.user_id == user.id)
         .all()
     )
-    result = []
-    for membership in memberships:
-        count = db.query(ServerMember).filter(ServerMember.server_id == membership.server_id).count()
-        result.append(serialize_server(membership.server, count))
-    return result
+    ids = [membership.server_id for membership in memberships]
+    counts = {}
+    if ids:
+        counts = dict(
+            db.query(ServerMember.server_id, func.count())
+            .filter(ServerMember.server_id.in_(ids))
+            .group_by(ServerMember.server_id)
+            .all()
+        )
+    return [serialize_server(membership.server, counts.get(membership.server_id, 0)) for membership in memberships]
 
 
 @router.post("/servers")
@@ -73,6 +79,44 @@ def get_server(server_id: int, user: User = Depends(get_current_user), db: Sessi
         raise HTTPException(404, "Servidor não encontrado.")
     count = db.query(ServerMember).filter(ServerMember.server_id == server_id).count()
     return serialize_server(server, count)
+
+
+@router.get("/servers/{server_id}/boot")
+def boot_server(server_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not is_server_member(db, server_id, user.id):
+        raise HTTPException(403, "Você não está nesse servidor.")
+    channels = (
+        db.query(Channel)
+        .filter(Channel.server_id == server_id)
+        .order_by(Channel.position, Channel.id)
+        .all()
+    )
+    memberships = (
+        db.query(ServerMember)
+        .options(joinedload(ServerMember.user))
+        .filter(ServerMember.server_id == server_id)
+        .all()
+    )
+    first = next((channel for channel in channels if channel.type == "text"), None)
+    messages = []
+    opened = None
+    if first:
+        opened = serialize_channel(first)
+        rows = (
+            db.query(Message)
+            .options(joinedload(Message.user))
+            .filter(Message.channel_id == first.id)
+            .order_by(Message.id.desc())
+            .limit(80)
+            .all()
+        )
+        messages = [serialize_message(row) for row in reversed(rows)]
+    return {
+        "channels": [serialize_channel(channel) for channel in channels],
+        "members": [user_public(membership.user) for membership in memberships],
+        "channel": opened,
+        "messages": messages,
+    }
 
 
 @router.get("/servers/{server_id}/channels")

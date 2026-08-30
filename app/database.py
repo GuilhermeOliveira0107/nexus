@@ -23,7 +23,10 @@ def _database_url() -> tuple[str, dict]:
 
 
 DB_URL, ENGINE_ARGS = _database_url()
-engine = create_engine(DB_URL, connect_args=ENGINE_ARGS, pool_pre_ping=True)
+_engine_opts = {"connect_args": ENGINE_ARGS, "pool_pre_ping": True}
+if "postgresql" in DB_URL:
+    _engine_opts.update(pool_size=5, max_overflow=5, pool_recycle=280)
+engine = create_engine(DB_URL, **_engine_opts)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 

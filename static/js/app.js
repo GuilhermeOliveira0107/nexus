@@ -16,6 +16,9 @@ const state = {
 };
 
 const voice = new VoiceChat();
+const bootCache = {};
+let openingServer = null;
+let lastVoiceSig = "";
 let ws = null;
 let heartbeat = null;
 let liveTimer = null;
@@ -648,11 +651,18 @@ function showAddServer() {
   $("create-server").onclick = async () => {
     const name = $("new-server-name").value.trim();
     if (name.length < 2) return toast("Dá um nome pra sala.");
-    const server = await api("/api/servers", { method: "POST", body: { name } });
-    await refreshAll();
-    closeModal();
-    openServer(server.id);
-    showInvitePicker();
+    const btn = $("create-server");
+    if (btn) btn.disabled = true;
+    try {
+      const server = await api("/api/servers", { method: "POST", body: { name } });
+      if (!state.servers.some((s) => s.id === server.id)) state.servers.push(server);
+      closeModal();
+      await openServer(server.id);
+      showInvitePicker();
+    } catch (err) {
+      toast(err.message);
+      if (btn) btn.disabled = false;
+    }
   };
   $("join-server").onclick = async () => {
     let code = $("join-code").value.trim();
@@ -660,21 +670,52 @@ function showAddServer() {
     if (match) code = match[1];
     try {
       const server = await api("/api/servers/join", { method: "POST", body: { invite_code: code } });
-      await refreshAll();
+      if (!state.servers.some((s) => s.id === server.id)) state.servers.push(server);
       closeModal();
-      openServer(server.id);
+      await openServer(server.id);
     } catch (err) { toast(err.message); }
   };
 }
 
+function applyBoot(id, data) {
+  bootCache[id] = data;
+  state.channels = data.channels || [];
+  state.members = data.members || [];
+  if (data.channel) {
+    state.channel = data.channel;
+    state.messages = data.messages || [];
+    if (data.channel.type !== "voice") startLiveSync();
+  }
+}
+
 async function openServer(id) {
+  if (openingServer === id && state.serverId === id) return;
+  openingServer = id;
   state.view = "server";
   state.serverId = id;
-  state.channels = await api(`/api/servers/${id}/channels`);
-  state.members = await api(`/api/servers/${id}/members`);
-  const firstText = state.channels.find((c) => c.type === "text");
-  if (firstText) await openChannel(firstText);
-  else render();
+  const cached = bootCache[id];
+  if (cached) {
+    applyBoot(id, cached);
+    render();
+    if (state.channel && state.channel.type !== "voice") renderMessages(true);
+  } else {
+    state.channels = [];
+    state.members = [];
+    state.channel = null;
+    state.messages = [];
+    render();
+  }
+  try {
+    const data = await api(`/api/servers/${id}/boot`);
+    if (state.serverId !== id) return;
+    applyBoot(id, data);
+    render();
+    if (state.channel && state.channel.type !== "voice") renderMessages(true);
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    if (openingServer === id) openingServer = null;
+  }
 }
 
 function renderServerSidebar() {
@@ -725,8 +766,9 @@ function promptChannel(type) {
   $("mk-ch").onclick = async () => {
     const name = $("ch-name").value.trim();
     if (!name) return;
-    await api(`/api/servers/${state.serverId}/channels`, { method: "POST", body: { name, type } });
-    state.channels = await api(`/api/servers/${state.serverId}/channels`);
+    const created = await api(`/api/servers/${state.serverId}/channels`, { method: "POST", body: { name, type } });
+    state.channels.push(created);
+    delete bootCache[state.serverId];
     closeModal();
     render();
   };
@@ -775,7 +817,8 @@ async function openChannel(channel) {
     render();
     return;
   }
-  state.messages = await api(`/api/channels/${channel.id}/messages`);
+  const cached = bootCache[state.serverId];
+  if (cached?.channel?.id === channel.id) state.messages = cached.messages || [];
   startLiveSync();
   $("topbar").innerHTML = `<span># ${channel.name}</span><span class="muted grow">${server ? server.name : ""}</span>
     <button class="btn primary" id="top-invite">Convidar</button>`;
@@ -783,6 +826,14 @@ async function openChannel(channel) {
   $("composer-input").placeholder = `Conversar em #${channel.name}`;
   render();
   renderMessages(true);
+  api(`/api/channels/${channel.id}/messages`).then((msgs) => {
+    if (!state.channel || state.channel.id !== channel.id) return;
+    state.messages = msgs;
+    if (bootCache[state.serverId]?.channel?.id === channel.id) {
+      bootCache[state.serverId].messages = msgs;
+    }
+    renderMessages(false);
+  }).catch(() => {});
 }
 
 async function openDm(id) {
@@ -843,7 +894,11 @@ function renderTyping() {
 
 function startLiveSync() {
   if (liveTimer) clearInterval(liveTimer);
-  liveTimer = setInterval(syncOpenChannel, 2000);
+  liveTimer = setInterval(syncOpenChannel, 3000);
+}
+
+function voiceSignature(occupants) {
+  return (occupants || []).map((p) => `${p.id}:${p.muted ? 1 : 0}:${p.deafened ? 1 : 0}`).sort().join(",");
 }
 
 async function syncOpenChannel() {
@@ -851,17 +906,23 @@ async function syncOpenChannel() {
   if (state.channel.type === "voice") {
     try {
       const data = await api(`/api/channels/${state.channel.id}/voice`);
-      applyVoiceOccupants(data.occupants, state.channel.id);
+      const sig = voiceSignature(data.occupants);
       if (voice.channelId === state.channel.id) {
         for (const peer of data.occupants || []) {
           if (peer.id !== state.me.id) await voice.ensurePeer(peer.id, state.me.id);
         }
       }
+      if (sig === lastVoiceSig) return;
+      lastVoiceSig = sig;
+      applyVoiceOccupants(data.occupants, state.channel.id);
       renderVoiceBar();
-      render();
+      renderVoiceRoom();
+      renderServerSidebar();
+      renderMembers();
     } catch (_) {}
     return;
   }
+  if (ws && ws.readyState === WebSocket.OPEN) return;
   try {
     const msgs = await api(`/api/channels/${state.channel.id}/messages`);
     const lastLocal = [...state.messages].reverse().find((m) => !m.pending);
